@@ -53,7 +53,7 @@ def menu_func_import(self, context):
     self.layout.operator(FILE_OT_z64_import.bl_idname, text="Zelda64 (.zobj;.zroom;.zmap)")
 
 def register():
-    bpy.utils.register_module("io_import_z64")
+    bpy.utils.register_module(__name__)
     bpy.types.INFO_MT_file_import.append(menu_func_import)
 
 def unregister():
