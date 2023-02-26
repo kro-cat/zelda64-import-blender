@@ -46,25 +46,19 @@ bl_info = {
 #from mathutils import Vector, Euler, Matrix
 
 import bpy
+import FILE_OT_z64_import from z64import
 
-import z64importer
-
-
-# Main funcs
 
 def menu_func_import(self, context):
-    self.layout.operator(ImportZ64.bl_idname, text="Zelda64 (.zobj;.zroom;.zmap)")
+    self.layout.operator(FILE_OT_z64_import.bl_idname, text="Zelda64 (.zobj;.zroom;.zmap)")
 
 def register():
-    #z64ilogger.registerLogging()
     bpy.utils.register_module("io_import_z64")
     bpy.types.INFO_MT_file_import.append(menu_func_import)
 
 def unregister():
-#    bpy.utils.unregister_module(__name__)
-#    bpy.types.INFO_MT_file_import.remove(menu_func_import)
-    z64importer.unregister()
-    #z64ilogger.unregisterLogging()
+    bpy.utils.unregister_module(__name__)
+    bpy.types.INFO_MT_file_import.remove(menu_func_import)
 
 if __name__ == "__main__":
     register()
