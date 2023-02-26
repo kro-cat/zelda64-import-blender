@@ -46,7 +46,7 @@ bl_info = {
 #from mathutils import Vector, Euler, Matrix
 
 import bpy
-import FILE_OT_z64_import from z64import
+from z64import import FILE_OT_z64_import
 
 
 def menu_func_import(self, context):
