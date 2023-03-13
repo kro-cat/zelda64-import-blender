@@ -1,7 +1,8 @@
 import bpy, os
+import f3dzex
 
-class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
-    bl_idname = "file.zobj2023"
+class IMPORT_SCENE_OT_zobj(bpy.types.Operator):
+    bl_idname = "import_scene.zobj"
     bl_label = "Import Zelda64"
     bl_options = {"PRESET", "UNDO"}
 
@@ -150,7 +151,8 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
     invertEnvColor: bpy.props.BoolProperty(
         name="Invert Env Color",
         description="Invert environment color (temporary fix)",
-        default=False) # todo what is this?
+        default=False
+    ) # TODO what is this?
 
     exportTextures: bpy.props.BoolProperty(
         name="Export Textures",
@@ -185,70 +187,55 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
     enableTexMirrorSharpOcarinaTags: bpy.props.BoolProperty(
         name="Texture Mirror SO Tags",
         description="Add #MirrorX and #MirrorY tags where necessary in the texture filename, used by SharpOcarina",
-        default=False)
+        default=False
+    )
 
     enableShadelessMaterials: bpy.props.BoolProperty(
         name="Shadeless Materials",
         description="Set materials to be shadeless, prevents using environment colors in-game",
-        default=False)
+        default=False
+    )
 
     enableToon: bpy.props.BoolProperty(
         name="Toony UVs",
         description="Obtain a toony effect by not scaling down the uv coords",
-        default=False)
+        default=False
+    )
 
     originalObjectScale: bpy.props.IntProperty(
         name="File Scale",
         description="Scale of imported object, blender model will be scaled 1/(file scale) (use 1 for maps, actors are usually 100, 10 or 1) (0 defaults to 1 for maps and 100 for actors)",
-        default=0, min=0, soft_max=1000)
+        default=0, min=0, soft_max=1000
+    )
 
     loadAnimations: bpy.props.BoolProperty(
         name="Load animations",
         description="For animated actors, load all animations or none",
-        default=True)
+        default=True
+    )
 
     MajorasAnims: bpy.props.BoolProperty(
         name="MajorasAnims",
-        description="Majora"s Mask Link"s Anims.",
-        default=False)
+        description="Majora's Mask Link's Anims.",
+        default=False
+    )
 
     ExternalAnimes: bpy.props.BoolProperty(
         name="ExternalAnimes",
         description="Load External Animes.",
-        default=False)
+        default=False
+    )
 
     prefixMultiImport: bpy.props.BoolProperty(
         name="Prefix multi-import",
         description="Add a prefix to imported data (objects, materials, images...) when importing several files at once",
-        default=True)
+        default=True
+    )
 
     setView3dParameters: bpy.props.BoolProperty(
         name="Set 3D View parameters",
         description="For maps, use a more appropriate grid size and clip distance",
-        default=True)
-
-    logging_level: bpy.props.IntProperty(
-        name="Log level",
-        description="(logs in the system console) The lower, the more logs. trace=%d debug=%d info=%d" \
-        % (logging_trace_level,logging.DEBUG,logging.INFO),
-        default=logging.INFO, min=1, max=51)
-
-    report_logging_level: bpy.props.IntProperty(
-        name="Report level",
-        description="What logs to report to Blender. When the import is done, warnings and errors are shown, if any. trace=%d debug=%d info=%d" \
-        % (logging_trace_level,logging.DEBUG,logging.INFO),
-        default=logging.INFO, min=1, max=51)
-
-    logging_logfile_enable: bpy.props.BoolProperty(
-        name="Log to file",
-        description="Log everything (all levels) to a file",
-        default=False)
-
-    logging_logfile_path: bpy.props.StringProperty(
-        name="Log file path",
-        #subtype="FILE_PATH", # cannot use two FILE_PATH at the same time
-        description="File to write logs to\nPath can be relative (to imported file) or absolute",
-        default="log_io_import_z64.txt"
+        default=True
     )
 
 
@@ -267,10 +254,10 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
                 self.do_import(file_abspath, file.name + "_")
             else:
                 self.do_import(file_abspath)
-        
-        bpy.context.scene.update()
-        
-        return {'FINISHED'}
+
+        bpy.context.view_layer.update()
+
+        return {"FINISHED"}
 
 
     def find_scene_segment_2(self, path, file_prefix):
@@ -291,37 +278,11 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
         elif not scene_file or not os.path.isfile(scene_file):
             # otherwise, try any .zscene
             for file in os.listdir(path):
-                if file.endswith('.zscene'):
+                if file.endswith(".zscene"):
                     scene_file = os.path.join(path, file)
                     break
 
         return scene_file
-
-
-    def load_other_scene_segments(self, path, file_prefix):
-        self.report(
-            {"DEBUG"}, "Loading other scene segments"
-        )
-
-        for i in range(16):
-            if i == 2:
-                segment_data_file = self.find_scene_segment_2(path, file_prefix)
-            else:
-                # I was told this is "ZRE" naming?
-                segment_data_file = os.path.join(path, "segment_%02X.zdata" % i)
-
-            if os.path.isfile(segment_data_file):
-                self.report(
-                    {"INFO"},
-                    'Loading scene segment 0x%02X from %s' \
-                    % (i, segment_data_file)
-                )
-                f3dzex.loadSegment(i, segment_data_file)
-            else:
-                self.report(
-                    {"DEBUG"},
-                    'No file found to load scene segment 0x%02X from' % i
-                )
 
 
     def do_import(self, file_abspath, prefix=""):
@@ -330,19 +291,18 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
         file_ext = file_ext.lower()
 
         self.report(
-            {"INFO"}, "Importing '%s'..." % file_name
+            {"INFO"}, f"Importing `{file_name}'..."
         )
 
         if self.importType == "AUTO":
-            if file_ext in {'.zmap', '.zroom'}:
+            if file_ext in {".zmap", ".zroom"}:
                 import_type = "ROOM"
             else:
                 import_type = "OBJECT"
 
             self.report(
                 {"DEBUG"},
-                "AUTO Import; using type %s to import file %s" \
-                % (import_type, file_name)
+                f"AUTO Import; using type {import_type} to import file {file_name}"
             )
         else:
             import_type = self.importType
@@ -362,20 +322,41 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
         f3dzex.loaddisplaylists(os.path.join(path, "displaylists.txt"))
 
         if self.loadOtherSegments:
-            # remember, file_prefix is file_name without the .ext
-            self.load_other_scene_segments(path, file_prefix)
+            self.report(
+                {"DEBUG"}, "Loading other scene segments"
+            )
+
+            for i in range(16):
+                if i == 2:
+                    # remember, file_prefix is file_name without the .ext
+                    segment_data_file = self.find_scene_segment_2(path, file_prefix)
+                else:
+                    # I was told this is "ZRE" naming?
+                    segment_data_file = os.path.join(path, f"segment_{i:02X.zdata}")
+
+                if os.path.isfile(segment_data_file):
+                    self.report(
+                        {"INFO"},
+                        f"Loading scene segment 0x{i:02X} from {segment_data_file}"
+                    )
+                    f3dzex.loadSegment(i, segment_data_file)
+                else:
+                    self.report(
+                        {"DEBUG"},
+                        f"No file found to load scene segment 0x{i:02X} from"
+                    )
 
         if import_type == "ROOM":
             self.report(
                 {"DEBUG"},
-                'Importing room'
+                "Importing room"
             )
             f3dzex.loadSegment(0x03, filepath)
             f3dzex.importMap()
         else:
             self.report(
                 {"DEBUG"},
-                'Importing object')
+                "Importing object"
             )
             f3dzex.loadSegment(0x06, filepath)
             f3dzex.importObj()
@@ -384,7 +365,7 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
         if self.setView3dParameters:
             for screen in bpy.data.screens:
                 for area in screen.areas:
-                    if area.type == 'VIEW_3D':
+                    if area.type == "VIEW_3D":
                         if importType == "ROOM":
                             area.spaces.active.grid_lines = 500
                             area.spaces.active.grid_scale = 10
@@ -392,51 +373,112 @@ class FILE_OT_z64_import(bpy.types.Operator, ImportHelper):
                             area.spaces.active.clip_end = 900000
                         area.spaces.active.viewport_shade = "TEXTURED"
 
+        time_elapsed = time.time() - time_start
         self.report(
-            {"INFO"}, "SUCCESS:  Elapsed time %.4f sec" % (time.time() - time_start)
+            {"INFO"},
+            f"SUCCESS:  Elapsed time {time_elapsed:.4f} sec"
         )
 
 
     def draw(self, context):
-        # TODO: what even is this
-        l = self.layout
-        l.prop(self, 'importType', text='Type')
-        l.prop(self, 'importStrategy', text='Strategy')
-        if self.importStrategy != 'NO_DETECTION':
-            l.prop(self, 'detectedDisplayLists_use_transparency')
-            l.prop(self, 'detectedDisplayLists_consider_unimplemented_invalid')
-        l.prop(self, "vertexMode")
-        l.prop(self, 'useVertexAlpha')
-        l.prop(self, "loadOtherSegments")
-        l.prop(self, "originalObjectScale")
-        box = l.box()
-        box.prop(self, "enableTexClampBlender")
-        box.prop(self, "replicateTexMirrorBlender")
-        if self.replicateTexMirrorBlender:
-            wBox = box.box()
-            wBox.label(text='Enabling texture mirroring', icon='ERROR')
-            wBox.label(text='will break exporting with', icon='ERROR')
-            wBox.label(text='SharpOcarina, and may break', icon='ERROR')
-            wBox.label(text='exporting in general with', icon='ERROR')
-            wBox.label(text='other tools.', icon='ERROR')
-        box.prop(self, "enableTexClampSharpOcarinaTags")
-        box.prop(self, "enableTexMirrorSharpOcarinaTags")
-        l.prop(self, "enableMatrices")
-        l.prop(self, "enablePrimColor")
-        l.prop(self, "enableEnvColor")
-        l.prop(self, "invertEnvColor")
-        l.prop(self, "exportTextures")
-        l.prop(self, "importTextures")
-        l.prop(self, "enableShadelessMaterials")
-        l.prop(self, "enableToon")
-        l.separator()
-        l.prop(self, "loadAnimations")
-        l.prop(self, "MajorasAnims")
-        l.prop(self, "ExternalAnimes")
-        l.prop(self, "prefixMultiImport")
-        l.prop(self, "setView3dParameters")
-        l.separator()
-        l.prop(self, "logging_level")
-        l.prop(self, 'logging_logfile_enable')
-        if self.logging_logfile_enable:
-            l.prop(self, 'logging_logfile_path')
+        pass
+
+class ZOBJ_PT_import_config(bpy.types.Panel):
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
+    bl_label = "Config"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "IMPORT_SCENE_OT_zobj"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, "import_type", text="Type")
+        layout.prop(operator, "import_strategy", text="Strategy")
+        if operator.import_strategy != "NO_DETECTION":
+            layout.prop(operator, "detected_display_lists_use_transparency")
+            layout.prop(operator, "detected_display_lists_consider_unimplemented_invalid")
+        layout.prop(operator, "vertex_mode")
+        layout.prop(operator, "load_other_segments")
+        layout.prop(operator, "original_object_scale")
+        layout.prop(operator, "enable_matrices")
+        layout.prop(operator, "enable_toon")
+        layout.prop(operator, "prefix_multi_import")
+        layout.prop(operator, "set_view_3d_parameters")
+
+class ZOBJ_PT_import_texture(bpy.types.Panel):
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
+    bl_label = "Textures"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "IMPORT_SCENE_OT_zobj"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, "enable_tex_clamp_blender")
+        layout.prop(operator, "replicate_tex_mirror_blender")
+        if operator.replicate_tex_mirror_blender:
+            wBox = layout.box()
+            wBox.label(text="Enabling texture mirroring", icon="ERROR")
+            wBox.label(text="will break exporting with", icon="BLANK1")
+            wBox.label(text="SharpOcarina, and may break", icon="BLANK1")
+            wBox.label(text="exporting in general with", icon="BLANK1")
+            wBox.label(text="other tools.", icon="BLANK1")
+        layout.prop(operator, "enable_tex_clamp_sharp_ocarina_tags")
+        layout.prop(operator, "enable_tex_mirror_sharp_ocarina_tags")
+
+        layout.separator()
+
+        layout.prop(operator, "enable_prim_color")
+        layout.prop(operator, "enable_env_color")
+        layout.prop(operator, "invert_env_color")
+        layout.prop(operator, "export_textures")
+        layout.prop(operator, "import_textures")
+
+class ZOBJ_PT_import_animation(bpy.types.Panel):
+    bl_space_type = "FILE_BROWSER"
+    bl_region_type = "TOOL_PROPS"
+    bl_label = "Animations"
+    bl_parent_id = "FILE_PT_operator"
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        return operator.bl_idname == "IMPORT_SCENE_OT_zobj"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        sfile = context.space_data
+        operator = sfile.active_operator
+
+        layout.prop(operator, "load_animations")
+        layout.prop(operator, "majora_anims")
+        layout.prop(operator, "external_animes") 

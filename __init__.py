@@ -2,6 +2,7 @@
 # Import models from Zelda64 files into Blender
 # Copyright (C) 2013 SoulofDeity
 # Copyright (C) 2020 Dragorn421
+# Copyright (C) 2023 StardustSauce
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
@@ -18,16 +19,17 @@
 
 bl_info = {
     "name":        "Zelda64 Importer",
-    "version":     (2, 5),
+    "description": "Import Zelda64 for Blender 2.8+",
+    "version":     (3, 0),
     "author":      "SoulofDeity",
-    "blender":     (2, 6, 0),
+    "blender":     (2, 80, 0),
     "location":    "File > Import-Export",
-    "description": "Import Zelda64 - updated in 2020",
     "warning":     "",
-    "wiki_url":    "https://github.com/Dragorn421/zelda64-import-blender",
-    "tracker_url": "https://github.com/Dragorn421/zelda64-import-blender",
-    "support":     'COMMUNITY',
-    "category":    "Import-Export"}
+    "wiki_url":    "https://github.com/StardustSauce/zelda64-import-blender",
+    "tracker_url": "https://github.com/StardustSauce/zelda64-import-blender",
+    "support":     "COMMUNITY",
+    "category":    "Import-Export"
+}
 
 """Anim stuff: RodLima http://www.facebook.com/rod.lima.96?ref=tn_tnmn"""
 
@@ -46,19 +48,38 @@ bl_info = {
 #from mathutils import Vector, Euler, Matrix
 
 import bpy
-from z64import import FILE_OT_z64_import
+from z64import import (
+    IMPORT_SCENE_OT_zobj,
+    ZOBJ_PT_import_config,
+    ZOBJ_PT_import_texture,
+    ZOBJ_PT_import_animation
+)
 
 
 def menu_func_import(self, context):
-    self.layout.operator(FILE_OT_z64_import.bl_idname, text="Zelda64 (.zobj;.zroom;.zmap)")
+    self.layout.operator(
+        ImportZ64.bl_idname,
+        text="Zelda64 (.zobj;.zroom;.zmap)"
+    )
+
+classes = (
+    IMPORT_SCENE_OT_zobj,
+    ZOBJ_PT_import_config,
+    ZOBJ_PT_import_texture,
+    ZOBJ_PT_import_animation
+)
 
 def register():
     bpy.utils.register_module(__name__)
-    bpy.types.INFO_MT_file_import.append(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
+    for cls in classes:
+        bpy.utils.register_class(cls)
 
 def unregister():
     bpy.utils.unregister_module(__name__)
-    bpy.types.INFO_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    for cls in classes:
+        bpy.utils.unregister_class(cls)
 
 if __name__ == "__main__":
     register()
