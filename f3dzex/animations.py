@@ -192,39 +192,42 @@ class Link_Animation:
         self.rotations = []
 
     @classmethod
-    def load(cls, address: int):
-        num_limbs = 21
-        seg_num, seg_offs = segment_offset(address)
-
+    def load(cls, hdr_segment: mmap, offset: int, num_limbs: int = 21):
         # Animation Header
 
-        hdr_format = ">HxI"
+        hdr_format = ">HxxI"
         # ssss0000 aaaaaaaa
         # s: # of frames
         # a: segment address of animation
 
-        hdr_segment = load_segment(seg_num)
-        seg_offs_end = seg_offs + 8
+        seg_offs_end = offset + 8
         if (seg_offs_end > hdr_segment.size()):
-            raise Exception(f"[Link_Animation::load] header offset" \
-                    f" 0x{seg_offs_end:06X} is out of bounds for segment" \
-                    f" 0x{seg_num:02X}")
-        hdr = unpack(hdr_format, hdr_segment[seg_offs:seg_offs_end])
+            raise InvalidAnimationException("[Link_Animation::load]" \
+                    f" header offset 0x{seg_offs_end:06X} is out of bounds" \
+                    f" for segment 0x{segment:02X}")
+        hdr = unpack(hdr_format, hdr_segment[offset:seg_offs_end])
 
         anim = cls()
 
         anim.num_frames = hdr[0]
         rval_seg_num, rval_seg_offs = segment_offset(hdr[1])
 
-        val_segment = load_segment(rval_seg_num)
+        if ((rval_seg_num == 0) or (rval_seg_num > 16)):
+            raise InvalidAnimationException("[Animation::load]" \
+                    f" bad segment 0x{rval_seg_num:02X} in value list address")
+
+        try:
+            val_segment = load_segment(rval_seg_num)
+        except SegmentNotFoundError as e:
+            raise InvalidAnimationException(str(e))
 
         def get_values(offs):
             frames = []
             for frame in range(anim.num_frames):
                 offs_start = offs + (0x7e * frame)
-                offs_end = offs + 6
+                offs_end = offs_start + 6
                 if (offs_end > val_segment.size()):
-                    raise Exception(f"[Link_Animation::load.get_values]" \
+                    raise InvalidAnimationException(f"[Link_Animation::load.get_values]" \
                             f" values offset 0x{offs_end:06X} is out" \
                             f" of bounds for segment 0x{rval_seg_num:02X}")
                 frames.append(unpack(">3H", val_segment[offs_start:offs_end]))
@@ -248,7 +251,9 @@ class Link_Animation:
             # * Swap x and y axes
             # * Negate y axis (after swap)
 
-def load_link_animations(majoras_mask: bool = False):
+        return anim
+
+def load_link_animations(num_limbs: int = 21, majoras_mask: bool = False):
     segment = 0x04
 
     animations = []
@@ -263,15 +268,20 @@ def load_link_animations(majoras_mask: bool = False):
     # sift through segment data one qword (8 bytes) at a time and try to match
     # the animation header format
     # TODO figure out a better way to load this... "unknown" animation data
-    for offset in range(offset_start, offset_end, 8):
-        address = (segment << 24) | offset
+    offset = offset_start
+    data = load_segment(segment)
+    seg_offs_end = data.size() - 1
+    while (((offset + 8) <= offset_end) and ((offset + 8) < seg_offs_end)):
         try:
-            anim = Link_Animation.load(address)
-            logger.debug(f"[load_link_animations] Link Animation found at" \
-                     f" 0x{int(address):08X} with {anim.num_frames} frames")
+            anim = Link_Animation.load(data, offset, num_limbs)
+            logger.info(f"[load_link_animations] Link Animation found at" \
+                    f" 0x{segment:02X}{offset:06X} with" \
+                    f" {anim.num_frames} frames")
             animations.append(anim)
-        except:
-            # no worries - an exception here means it's not a valid animation
+            offset += 8
+        except InvalidAnimationException as e:
+            logger.debug(str(e))
+            offset += 8
             pass
 
     num_animations = len(animations)
