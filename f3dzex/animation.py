@@ -13,12 +13,16 @@ from segments import load_segment
 def seg_offs(address: int):
         return ((address >> 24), (address & 0x00ffffff))
 
+class Animation_Frame:
+    def __init__(self, translation, rotation):
+        self.translation = translation
+        self.rotation = rotation
 
 class Animation:
     def __init__(self):
         # translations of the root limb.
         # ( [x1, x2, x3, ...], [y1, y2, y3, ...], [z1, z2, z3, ...] )
-        self.translations = (0, 0, 0)
+        self.translations = ([0], [0], [0])
 
         # rotations of each limb
         # [ ( [l1_x1, l1_x2, ...], [l1_y1, l1_y2, ...], [l1_z1, l1_z2, ...] ),
@@ -40,8 +44,10 @@ class Animation:
         # i: segment offset of rotation index list
         #     - start of rotation data in animation, limb indexed
         # l: index pivot
-        #     - rotation value list indices less than this value remain constant.
-        #     - rotation value list indices greater than this value are treated as sequential rotation frames.
+        #     - rotation value list indices less than this value
+        #       remain constant.
+        #     - rotation value list indices greater than this value
+        #       are treated as sequential rotation frames.
 
         hdr_segment = load_segment(segment_num)
         hdr = unpack(hdr_format, hdr_segment[segment_offs
@@ -89,7 +95,6 @@ class Animation:
             # * Scale translation by rotationScale (360.0 / 65536.0)
             # * Swap x and y axes
             # * Negate y axis (after swap)
-
 
 
 def find_animations(num_limbs: int, external=False: bool):
