@@ -13,10 +13,38 @@ class Hierarchy:
 
     @classmethod
     def load(cls, hdr_segment: mmap, offset: int, num_limbs: int):
-def locateHierarchies(self):
-    log = getLogger('F3DZEX.locateHierarchies')
-    data = self.segment[0x06]
-    for i in range(0, len(data)-11, 4):
+        # Hierarchy Header
+
+        hdr_format = ">IBxxxBxxx"
+        # iiiiiiii pp000000 xx000000
+        # i: segment offset of limb index list
+        # p: number of parts
+        # x: number of display lists
+
+        seg_offs_end = offset + 12
+        if (seg_offs_end > hdr_segment.size()):
+            raise InvalidHierarchyException("[Hierarchy::load]" \
+                    f" header offset 0x{seg_offs_end:06X} is out of bounds" \
+                    f" for segment 0x{segment:02X}")
+        hdr = unpack(hdr_format, hdr_segment[offset:seg_offs_end])
+
+        hierarchy = cls()
+
+        lidx_seg_num, lidx_seg_offs = segment_offset(hdr[0])
+        hierarchy.part_count = hdr[1]
+        hierarchy.dlist_counnt = hdr[2]
+
+        if ((lidx_seg_num == 0) or (lidx_seg_num > 16)):
+            raise InvalidHierarchyException("[Hierarchy::load]" \
+                    f" bad segment 0x{lidx_seg_num:02X} in value list address")
+
+        try:
+            lidx_segment = load_segment(lidx_seg_num)
+        except SegmentNotFoundError as e:
+            raise InvalidHierarchyException(str(e))
+
+        # TODO left off here
+
         # test for header "bboooooo pp000000 xx000000": if segment bb=0x06 and offset oooooo 4-aligned and not zero parts (pp!=0)
         if data[i] == 0x06 and (data[i+3] & 3) == 0 and data[i+4] != 0:
             offset = unpack_from(">L", data, i)[0] & 0x00FFFFFF
@@ -38,53 +66,6 @@ def locateHierarchies(self):
                             self.hierarchy.append(h)
                         else:
                             log.warning('Skipping hierarchy at 0x%08X', j)
-        # Hierarchy Header
-
-        hdr_format = ">IBxxxBxxx"
-        # iiiiiiii pp000000 xx000000
-        # i: segment offset of limb index list
-        # p: number of parts
-        # x: number of display lists
-
-        # TODO left off here
-
-        # try:
-        #     hdr_segment = load_segment(segment)
-        # except SegmentNotFoundError:
-        #     raise InvalidAnimationException("[Animation::load]" \
-        #             f" bad segment 0x{seg_num:02X}")
-
-        seg_offs_end = offset + 16
-        if (seg_offs_end > hdr_segment.size()):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" header offset 0x{seg_offs_end:06X} is out of bounds" \
-                    f" for segment 0x{segment:02X}")
-        hdr = unpack(hdr_format, hdr_segment[offset:seg_offs_end])
-
-        anim = cls()
-
-        anim.num_frames = hdr[0]
-        rval_seg_num, rval_seg_offs = segment_offset(hdr[1])
-        ridx_seg_num, ridx_seg_offs = segment_offset(hdr[2])
-        index_pivot = hdr[3]
-
-        if ((rval_seg_num == 0) or (rval_seg_num > 16)):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" bad segment 0x{rval_seg_num:02X} in value list address")
-
-        if ((ridx_seg_num == 0) or (ridx_seg_num > 16)):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" bad segment 0x{ridx_seg_num:02X} in index list address")
-
-        try:
-            val_segment = load_segment(rval_seg_num)
-        except SegmentNotFoundError as e:
-            raise InvalidAnimationException(str(e))
-
-        try:
-            idx_segment = load_segment(ridx_seg_num)
-        except SegmentNotFoundError as e:
-            raise InvalidAnimationException(str(e))
 
         def get_index(offs):
             offs_end = offs + 6

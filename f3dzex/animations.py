@@ -67,7 +67,7 @@ class Animation:
 
         anim = cls()
 
-        anim.num_frames = hdr[0]
+        anim.frame_count = hdr[0]
         rval_seg_num, rval_seg_offs = segment_offset(hdr[1])
         ridx_seg_num, ridx_seg_offs = segment_offset(hdr[2])
         index_pivot = hdr[3]
@@ -112,10 +112,10 @@ class Animation:
             for idx in idx_xyz:
                 if (idx >= index_pivot):
                     values.append(_get_values(rval_seg_offs + idx,
-                                              anim.num_frames))
+                                              anim.frame_count))
                 else:
                     values.append(_get_values(rval_seg_offs + idx)
-                                  * anim.num_frames)
+                                  * anim.frame_count)
             return list(zip(values[0], values[1], values[2]))
 
         # Translation
@@ -159,7 +159,7 @@ def load_animations(num_limbs: int, external: bool = False):
             anim = Animation.load(data, offset, num_limbs)
             logger.info(f"[load_animations] Animation found at" \
                     f" 0x{segment:02X}{offset:06X} with" \
-                    f" {anim.num_frames} frames")
+                    f" {anim.frame_count} frames")
             animations.append(anim)
             offset += 16
         except InvalidAnimationException as e:
@@ -209,7 +209,7 @@ class Link_Animation:
 
         anim = cls()
 
-        anim.num_frames = hdr[0]
+        anim.frame_count = hdr[0]
         rval_seg_num, rval_seg_offs = segment_offset(hdr[1])
 
         if ((rval_seg_num == 0) or (rval_seg_num > 16)):
@@ -223,7 +223,7 @@ class Link_Animation:
 
         def get_values(offs):
             frames = []
-            for frame in range(anim.num_frames):
+            for frame in range(anim.frame_count):
                 offs_start = offs + (0x7e * frame)
                 offs_end = offs_start + 6
                 if (offs_end > val_segment.size()):
@@ -276,7 +276,7 @@ def load_link_animations(num_limbs: int = 21, majoras_mask: bool = False):
             anim = Link_Animation.load(data, offset, num_limbs)
             logger.info(f"[load_link_animations] Link Animation found at" \
                     f" 0x{segment:02X}{offset:06X} with" \
-                    f" {anim.num_frames} frames")
+                    f" {anim.frame_count} frames")
             animations.append(anim)
             offset += 8
         except InvalidAnimationException as e:
