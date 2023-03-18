@@ -1,13 +1,10 @@
 import logging
-from mmap import mmap
-from struct import unpack
-from warnings import warn
 
-from .segments import load_segment, SegmentNotFoundError
-from .addressing import segment_offset
+from .memory import load_segment, MemoryException
 
 
 logger = logging.getLogger(__name__)
+
 
 class InvalidAnimationException(Exception):
     pass
@@ -18,28 +15,30 @@ class Animation_Frame:
         self.rotation = rotation
 
 class Animation:
-    def __init__(self):
-        # translations of the root limb.
-        # [
-        #   (x,y,z), # frame 0
-        #   (x,y,z), # frame 1
-        #   ...
-        # ]
-        self.translations = []
+    translation: tuple
+    rotations: list
+
+    def __init__(self, translation: tuple, rotations: list):
+        # translation of the root limb. Guaranteed to be static
+        # (x,y,z)
+        self.translation = translation
 
         # rotations of each limb
-        # [
+        # !!! This is a ragged array !!!
+        # [ # frame 1, frame 2, ...
         #   [ (x,y,z), (x,y,z), ... ], # limb 0
         #   [ (x,y,z), (x,y,z), ... ], # limb 1
         #   ...
         # ]
-        self.rotations = []
+        self.rotations = rotations
 
-    @classmethod
-    def load(cls, hdr_segment: mmap, offset: int, num_limbs: int):
-        # Animation Header
 
-        hdr_format = ">HxxIIHxx"
+def load_animation(segment: int, offset: int, num_limbs: int):
+    # Animation Header
+
+    try:
+        hdr_segment = load_segment(segment)
+        header = hdr_segment.read_fmt(">HxxIIHxx", offset)
         # ssss0000 rrrrrrrr iiiiiiii llll0000
         # s: # of frames
         # r: segment offset of rotation value list
@@ -51,93 +50,126 @@ class Animation:
         #       remain constant.
         #     - rotation value list indices greater than this value
         #       are treated as sequential rotation frames.
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_animation] failed to load header") from e
 
-        # try:
-        #     hdr_segment = load_segment(segment)
-        # except SegmentNotFoundError:
-        #     raise InvalidAnimationException("[Animation::load]" \
-        #             f" bad segment 0x{seg_num:02X}")
+    frame_count = header[0]
+    rval_seg_num, rval_seg_offs = segment_offset(header[1])
+    ridx_seg_num, ridx_seg_offs = segment_offset(header[2])
+    index_pivot = header[3]
 
-        seg_offs_end = offset + 16
-        if (seg_offs_end > hdr_segment.size()):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" header offset 0x{seg_offs_end:06X} is out of bounds" \
-                    f" for segment 0x{segment:02X}")
-        hdr = unpack(hdr_format, hdr_segment[offset:seg_offs_end])
+    try:
+        val_segment = load_segment(rval_seg_num)
+        idx_segment = load_segment(ridx_seg_num)
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_animation] failed to load segment") from e
 
-        anim = cls()
+    # Translation
 
-        anim.frame_count = hdr[0]
-        rval_seg_num, rval_seg_offs = segment_offset(hdr[1])
-        ridx_seg_num, ridx_seg_offs = segment_offset(hdr[2])
-        index_pivot = hdr[3]
+    translation_indices = idx_segment.read_fmt(">3H", ridx_seg_offs)
+    translation_values = [ val_segment.read_fmt(">H", rval_seg_offs + index)
+                          for index in translation_indices ]
+    try:
+        translation = next(zip(translation_values[0],
+                               translation_values[1],
+                               translation_values[2]))
+    except StopIteration as e:
+        raise InvalidAnimationException(
+            '[load_animation] no translation I guess??') from e
+    # NOTE missing from rewrite:
+    # * Scale translation by global scaleFactor
+    # * Swap z and y axes
+    # * Negate y axis (after swap)
 
-        if ((rval_seg_num == 0) or (rval_seg_num > 16)):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" bad segment 0x{rval_seg_num:02X} in value list address")
+    # Rotations
 
-        if ((ridx_seg_num == 0) or (ridx_seg_num > 16)):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" bad segment 0x{ridx_seg_num:02X} in index list address")
+    ridx_seg_offs += 6 # translation doesn't count
+    rotations = []
+    for limb in range(num_limbs): # indexed arrays
+        indices = idx_segment.read_fmt(">3H", ridx_seg_offs + (6 * limb))
+        # xxxx yyyy zzzz
+        # x, y, z: an index in the values list (head of values array)
 
-        try:
-            val_segment = load_segment(rval_seg_num)
-        except SegmentNotFoundError as e:
-            raise InvalidAnimationException(str(e))
+        values = []
+        for index in indices:
+            count = 1 if (index < index_pivot) else frame_count
+            values += val_segment.read_fmt(f">{count}H", rval_seg_offs + index)
 
-        try:
-            idx_segment = load_segment(ridx_seg_num)
-        except SegmentNotFoundError as e:
-            raise InvalidAnimationException(str(e))
+        # values = [ [x], [y], [z] ]
+        # ... needs to be zipped
+        rotations += list(zip(values[0], values[1], values[2]))
 
-        def get_index(offs):
-            offs_end = offs + 6
-            if (offs_end > idx_segment.size()):
-                raise InvalidAnimationException("[Animation::load.get_index]" \
-                        f" index offset 0x{offs_end:06X} is out of bounds" \
-                        f" for segment 0x{ridx_seg_num:02X}")
-            return unpack(">3H", idx_segment[offs:offs_end])
+    # NOTE missing from rewrite:
+    # * Scale rotation by rotationScale (360.0 / 65536.0) # 0x10000
+    # * Swap z and y axes
+    # * Negate y axis (after swap)
 
-        def _get_values(offs, count=1):
-            offs_end = offs + (2 * count)
-            if (offs_end > val_segment.size()):
-                raise InvalidAnimationException("[Animation::load.get_values]" \
-                        f" values offset 0x{offs_end:06X} is out of" \
-                        f" bounds for segment 0x{rval_seg_num:02X}")
-            return unpack(f">{count}H", val_segment[offs:offs_end])
+    return Animation(translation, rotations)
 
-        def get_values(offs):
-            values = []
-            idx_xyz = get_index(offs)
-            for idx in idx_xyz:
-                if (idx >= index_pivot):
-                    values.append(_get_values(rval_seg_offs + idx,
-                                              anim.frame_count))
-                else:
-                    values.append(_get_values(rval_seg_offs + idx)
-                                  * anim.frame_count)
-            return list(zip(values[0], values[1], values[2]))
 
-        # Translation
+def load_link_animation(segment: int, offset: int, num_limbs: int = 21):
+    # Animation Header
 
-        anim.translations = get_values(ridx_seg_offs)
-        # NOTE missing from rewrite:
-        # * Scale translation by global scaleFactor
-        # * Swap z and y axes
-        # * Negate y axis (after swap)
+    try:
+        hdr_segment = load_segment(segment)
+        header = hdr_segment.read_fmt(">HxxI", offset)
+        # ssss0000 aaaaaaaa
+        # s: # of frames
+        # a: segment address of animation
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_link_animation] failed to load header") from e
 
-        # Limb Rotations
+    frame_count = header[0]
+    rval_seg_num, rval_seg_offs = segment_offset(header[1])
 
-        for limb in range(num_limbs):
-            # offset by 6 (3 * 2 bytes) firstly; so we skip the tranlation
-            ridx_seg_offs += 6
-            anim.rotations.append(get_values(ridx_seg_offs))
-            # NOTE missing from rewrite:
-            # * Scale translation by rotationScale (360.0 / 65536.0) # 0x10000
-            # * Swap z and y axes
-            # * Negate y axis (after swap)
+    try:
+        val_segment = load_segment(rval_seg_num)
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_link_animation] failed to load segment") from e
 
-        return anim
+    # Translation
+
+    translation_values = val_segment.read_fmt(">3H", rval_seg_offs)
+    try:
+        translation = next(zip(translation_values[0],
+                               translation_values[1],
+                               translation_values[2]))
+    except StopIteration as e:
+        raise InvalidAnimationException(
+            '[load_link_animation] no translation I guess??') from e
+    # NOTE missing from rewrite:
+    # * Scale translation by global scaleFactor
+    # * Swap z and y axes
+    # * Negate y axis (after swap)
+
+    # Rotations
+
+    ridx_seg_offs += 6 # translation doesn't count
+
+    rotations = []
+    anim_length = 3 * frame_count
+    matrix_width = 2 * anim_length # accounting for width of 'H' format
+    for limb in range(num_limbs): # indexed matrix
+        values = val_segment.read_fmt(f">{anim_length}H",
+                                      rval_seg_offs + (matrix_width * limb))
+
+        # values = [ [x, y, z, x, y, z, x, ... ]
+        # ... needs to be grouped by threes
+
+        rotations += [ (values[n], values[n+1], values[n+2])
+                     for n in range(0, len(values), 3) ]
+
+    # NOTE missing from rewrite:
+    # * Scale rotation by rotationScale (360.0 / 65536.0) # 0x10000
+    # * Swap z and y axes
+    # * Negate y axis (after swap)
+
+    return Animation(translation, rotations)
+
 
 def load_animations(num_limbs: int, external: bool = False):
     # Animations are found in the following segments:
@@ -152,20 +184,17 @@ def load_animations(num_limbs: int, external: bool = False):
     # the animation header format
     # TODO figure out a better way to load this... "unknown" animation data
     offset = 0
-    data = load_segment(segment)
-    seg_offs_end = data.size() - 1
+    seg_offs_end = load_segment(segment).size() - 1
     while ((offset + 16) < seg_offs_end):
         try:
-            anim = Animation.load(data, offset, num_limbs)
+            anim = load_animation(segment, offset, num_limbs)
             logger.info(f"[load_animations] Animation found at" \
-                    f" 0x{segment:02X}{offset:06X} with" \
-                    f" {anim.frame_count} frames")
+                    f" 0x{segment:02X}{offset:06X}")
             animations.append(anim)
             offset += 16
         except InvalidAnimationException as e:
-            logger.debug(str(e))
+            logger.debug(e.value)
             offset += 4
-            pass
 
     num_animations = len(animations)
     logger.info(f"[load_animations] Found {num_animations:d} total" \
@@ -173,85 +202,6 @@ def load_animations(num_limbs: int, external: bool = False):
 
     return animations
 
-class Link_Animation:
-    def __init__(self):
-        # translations of the root limb.
-        # [
-        #   (x,y,z), # frame 0
-        #   (x,y,z), # frame 1
-        #   ...
-        # ]
-        self.translations = []
-
-        # rotations of each limb
-        # [
-        #   [ (x,y,z), (x,y,z), ... ], # limb 0
-        #   [ (x,y,z), (x,y,z), ... ], # limb 1
-        #   ...
-        # ]
-        self.rotations = []
-
-    @classmethod
-    def load(cls, hdr_segment: mmap, offset: int, num_limbs: int = 21):
-        # Animation Header
-
-        hdr_format = ">HxxI"
-        # ssss0000 aaaaaaaa
-        # s: # of frames
-        # a: segment address of animation
-
-        seg_offs_end = offset + 8
-        if (seg_offs_end > hdr_segment.size()):
-            raise InvalidAnimationException("[Link_Animation::load]" \
-                    f" header offset 0x{seg_offs_end:06X} is out of bounds" \
-                    f" for segment 0x{segment:02X}")
-        hdr = unpack(hdr_format, hdr_segment[offset:seg_offs_end])
-
-        anim = cls()
-
-        anim.frame_count = hdr[0]
-        rval_seg_num, rval_seg_offs = segment_offset(hdr[1])
-
-        if ((rval_seg_num == 0) or (rval_seg_num > 16)):
-            raise InvalidAnimationException("[Animation::load]" \
-                    f" bad segment 0x{rval_seg_num:02X} in value list address")
-
-        try:
-            val_segment = load_segment(rval_seg_num)
-        except SegmentNotFoundError as e:
-            raise InvalidAnimationException(str(e))
-
-        def get_values(offs):
-            frames = []
-            for frame in range(anim.frame_count):
-                offs_start = offs + (0x7e * frame)
-                offs_end = offs_start + 6
-                if (offs_end > val_segment.size()):
-                    raise InvalidAnimationException(f"[Link_Animation::load.get_values]" \
-                            f" values offset 0x{offs_end:06X} is out" \
-                            f" of bounds for segment 0x{rval_seg_num:02X}")
-                frames.append(unpack(">3H", val_segment[offs_start:offs_end]))
-            return frames
-
-        # Translation
-
-        anim.translations = get_values(rval_seg_offs)
-        # NOTE missing from rewrite:
-        # * Swap z and y axes
-        # * Negate y axis (after swap)
-        # * Translate z axis by -25.5 (after swap)
-
-        # Rotation
-        for limb in range(num_limbs):
-            # offset by 6 (3 * 2 bytes) firstly; so we skip the tranlation
-            rval_offs += 6
-            anim.rotations.append(get_values(rval_seg_offs))
-            # NOTE missing from rewrite:
-            # * Scale translation by rotationScale (360.0 / 65536.0) # 0x10000
-            # * Swap x and y axes
-            # * Negate y axis (after swap)
-
-        return anim
 
 def load_link_animations(num_limbs: int = 21, majoras_mask: bool = False):
     segment = 0x04
@@ -269,24 +219,20 @@ def load_link_animations(num_limbs: int = 21, majoras_mask: bool = False):
     # the animation header format
     # TODO figure out a better way to load this... "unknown" animation data
     offset = offset_start
-    data = load_segment(segment)
-    seg_offs_end = data.size() - 1
+    seg_offs_end = load_segment(segment).size() - 1
     while (((offset + 8) <= offset_end) and ((offset + 8) < seg_offs_end)):
         try:
-            anim = Link_Animation.load(data, offset, num_limbs)
+            anim = load_link_animation(segment, offset, num_limbs)
             logger.info(f"[load_link_animations] Link Animation found at" \
-                    f" 0x{segment:02X}{offset:06X} with" \
-                    f" {anim.frame_count} frames")
+                    f" 0x{segment:02X}{offset:06X}")
             animations.append(anim)
             offset += 8
         except InvalidAnimationException as e:
-            logger.debug(str(e))
+            logger.debug(e.value)
             offset += 8
-            pass
 
     num_animations = len(animations)
     logger.debug(f"[load_link_animations] Found {num_animations:d} total" \
              f" Link Animations in segment 0x{segment:02X}")
 
     return animations
-
