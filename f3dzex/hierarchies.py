@@ -1,6 +1,6 @@
 import logging
 
-from .memory import segment_offset, load_segment, SegmentNotFoundError
+from .memory import segment_offset, load_segment, MemoryException
 
 
 logger = logging.getLogger(__name__)
@@ -8,77 +8,98 @@ logger = logging.getLogger(__name__)
 class InvalidHierarchyException(Exception):
     pass
 
+class Limb:
+    translation: tuple
+    child_index: int
+    sibling_index: int
+    display_list_addr: int
+
+    def __init__(self, translation: tuple, child_index: int,
+                 sibling_index: int, display_list_addr: int):
+        self.translation = translation
+        self.child_index = child_index
+        self.sibling_index = sibling_index
+        self.display_list_addr = display_list_addr
+
 class Hierarchy:
-    def __init__(self):
-        pass
+    limbs: list
 
-    @classmethod
-    def load(cls, hdr_segment: mmap, offset: int, num_limbs: int):
-        # Hierarchy Header
+    def __init__(self, limbs: list):
+        self.limbs = limbs
 
-        hdr_format = ">IBxxxBxxx"
+
+def load_limb(segment: int, offset: int):
+    # Limb
+
+    try:
+        limb_segment = load_segment(segment)
+        limb = limb_segment.read_fmt(">HHHBBI", offset)
+        # xxxxyyyy zzzzaabb dddddddd
+        # x: x translation relative to parent
+        # y: y translation relative to parent
+        # z: z translation relative to parent
+        # a: child limb index in list
+        # b: sibling limb index in list
+        # d: display list address
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_limb] failed to load limb") from e
+
+    return Limb((limb[0], limb[1], limb[2]), limb[3], limb[4], limb[5])
+
+
+def load_hierarchy(segment: int, offset: int):
+    # Hierarchy Header
+
+    try:
+        hdr_segment = load_segment(segment)
+        header = hdr_segment.read_fmt(">IBxxxBxxx", offset)
         # iiiiiiii pp000000 xx000000
         # i: segment offset of limb index list
         # p: number of parts
         # x: number of display lists
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_hierarchy] failed to load header") from e
 
-        seg_offs_end = offset + 12
-        if (seg_offs_end > hdr_segment.size()):
-            raise InvalidHierarchyException("[Hierarchy::load]" \
-                    f" header offset 0x{seg_offs_end:06X} is out of bounds" \
-                    f" for segment 0x{segment:02X}")
-        hdr = unpack(hdr_format, hdr_segment[offset:seg_offs_end])
+    lidx_seg_num, lidx_seg_offs = segment_offset(header[0])
+    limb_count = header[1]
+    displaylist_count = header[2]
 
-        hierarchy = cls()
+    try:
+        idx_segment = load_segment(lidx_seg_num)
+    except* MemoryException as e:
+        raise InvalidAnimationException(
+            "[load_hierarchy] failed to load segment") from e
 
-        lidx_seg_num, lidx_seg_offs = segment_offset(hdr[0])
-        part_count = hdr[1]
-        hierarchy.displaylist_count = hdr[2]
+    # Limbs
 
-        if ((lidx_seg_num == 0) or (lidx_seg_num > 16)):
-            raise InvalidHierarchyException("[Hierarchy::load]" \
-                    f" bad segment 0x{lidx_seg_num:02X} in value list address")
+    limbs = []
+    for limb in range(limb_count):
+        lval_seg_num, lval_seg_offs = segment_offset(
+            idx_segment.read_fmt(">I")[0])
 
-        try:
-            lidx_segment = load_segment(lidx_seg_num)
-        except SegmentNotFoundError as e:
-            raise InvalidHierarchyException from e
+        limbs += load_limb(lval_seg_num, lval_seg_offs)
 
-        def get_values(offs):
-            offs_end = offs + (4 * part_count)
-            if (offs_end > lidx_segment.size()):
-                raise InvalidAnimationException("[Hierarchy::load.get_limbs]" \
-                        f" limb offset 0x{offs_end:06X} is out of" \
-                        f" bounds for segment 0x{rval_seg_num:02X}")
-            return list(unpack(f">{part_count}L", lidx_segment[offs:offs_end]))
+    return Hierarchy(limbs)
 
-        def get_limbs(offs):
-            offs_end = offs + (4 * part_count)
-            if (offs_end > lidx_segment.size()):
-                raise InvalidAnimationException("[Hierarchy::load.get_limbs]" \
-                        f" limb offset 0x{offs_end:06X} is out of" \
-                        f" bounds for segment 0x{rval_seg_num:02X}")
-            for limb_offset in unpack(f">{part_count}L", lidx_segment[offs:offs_end])
-
-        hierarchy.limbs = get_limbs(lidx_seg_offs)
-
-        return hierarchy
 
 def load_hierarchies():
+    segment = 0x06
+
     hierarchies = []
 
     # sift through segment data one dword (4 bytes) at a time and try to match
     # the animation header format
     # TODO figure out a better way to load this... "unknown" animation data
     offset = 0
-    data = load_segment(0x06)
-    seg_offs_end = data.size() - 1
+    data = load_segment(segment)
+    seg_offs_end = load_segment(segment).size() - 1
     while ((offset + 12) < seg_offs_end):
         try:
-            hierarchy = Hierarchies.load(data, offset)
+            hierarchies.append(load_hierarchy(segment, offset))
             logger.info(f"[load_hierarchies] Hierarchy found at" \
                     f" 0x{segment:02X}{offset:06X}")
-            hierarchies.append(hierarchy)
             offset += 12
         except InvalidHierarchyException as e:
             logger.debug(e.value)

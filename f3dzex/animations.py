@@ -1,6 +1,6 @@
 import logging
 
-from .memory import load_segment, MemoryException
+from .memory import segment_offset, load_segment, MemoryException
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class Animation:
         self.rotations = rotations
 
 
-def load_animation(segment: int, offset: int, num_limbs: int):
+def load_animation(segment: int, offset: int, limb_count: int):
     # Animation Header
 
     try:
@@ -87,7 +87,7 @@ def load_animation(segment: int, offset: int, num_limbs: int):
 
     ridx_seg_offs += 6 # translation doesn't count
     rotations = []
-    for limb in range(num_limbs): # indexed arrays
+    for limb in range(limb_count): # indexed arrays
         indices = idx_segment.read_fmt(">3H", ridx_seg_offs + (6 * limb))
         # xxxx yyyy zzzz
         # x, y, z: an index in the values list (head of values array)
@@ -109,7 +109,7 @@ def load_animation(segment: int, offset: int, num_limbs: int):
     return Animation(translation, rotations)
 
 
-def load_link_animation(segment: int, offset: int, num_limbs: int = 21):
+def load_link_animation(segment: int, offset: int, limb_count: int = 21):
     # Animation Header
 
     try:
@@ -153,7 +153,7 @@ def load_link_animation(segment: int, offset: int, num_limbs: int = 21):
     rotations = []
     anim_length = 3 * frame_count
     matrix_width = 2 * anim_length # accounting for width of 'H' format
-    for limb in range(num_limbs): # indexed matrix
+    for limb in range(limb_count): # indexed matrix
         values = val_segment.read_fmt(f">{anim_length}H",
                                       rval_seg_offs + (matrix_width * limb))
 
@@ -171,7 +171,7 @@ def load_link_animation(segment: int, offset: int, num_limbs: int = 21):
     return Animation(translation, rotations)
 
 
-def load_animations(num_limbs: int, external: bool = False):
+def load_animations(limb_count: int, external: bool = False):
     # Animations are found in the following segments:
     # 0x06 (Animations)
     # 0x0f (External Animations)
@@ -187,10 +187,9 @@ def load_animations(num_limbs: int, external: bool = False):
     seg_offs_end = load_segment(segment).size() - 1
     while ((offset + 16) < seg_offs_end):
         try:
-            anim = load_animation(segment, offset, num_limbs)
+            animations.append(load_animation(segment, offset, limb_count))
             logger.info(f"[load_animations] Animation found at" \
                     f" 0x{segment:02X}{offset:06X}")
-            animations.append(anim)
             offset += 16
         except InvalidAnimationException as e:
             logger.debug(e.value)
@@ -203,7 +202,7 @@ def load_animations(num_limbs: int, external: bool = False):
     return animations
 
 
-def load_link_animations(num_limbs: int = 21, majoras_mask: bool = False):
+def load_link_animations(limb_count: int = 21, majoras_mask: bool = False):
     segment = 0x04
 
     animations = []
@@ -222,10 +221,9 @@ def load_link_animations(num_limbs: int = 21, majoras_mask: bool = False):
     seg_offs_end = load_segment(segment).size() - 1
     while (((offset + 8) <= offset_end) and ((offset + 8) < seg_offs_end)):
         try:
-            anim = load_link_animation(segment, offset, num_limbs)
+            animations.append(load_link_animation(segment, offset, limb_count))
             logger.info(f"[load_link_animations] Link Animation found at" \
                     f" 0x{segment:02X}{offset:06X}")
-            animations.append(anim)
             offset += 8
         except InvalidAnimationException as e:
             logger.debug(e.value)
