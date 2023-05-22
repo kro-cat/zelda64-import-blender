@@ -7,9 +7,9 @@ from ctypes import pointer, memmove, sizeof,\
 #        LittleEndianStructure, c_int, c_uint8, c_uint16, c_uint32, c_uint64
 
 
-from f3dzex2.processmodel import memory
-import f3dzex2.processmodel.RCP as pm
-# from ../..memory import MemoryException
+from .. import memory
+from . import registers
+# from . import stacks
 
 
 logger = logging.getLogger(__name__)
@@ -32,8 +32,8 @@ class Opcode(ABC):
             logger.debug("instruction {inst[0]:01X} has no size")
             return 0
 
-        data = memory.read(pm.dlp, size)
-        pm.dlp += size
+        data = memory.read(registers.pc, size)
+        registers.pc += size
 
         struct = self.struct()
         memmove(pointer(struct), data, size)
@@ -55,7 +55,7 @@ class NOSYS(Opcode):
             logger.debug("instruction {inst[0]:01X} has no size")
             return 0
 
-        pm.dlp += size
+        registers.pc += size
 
 
 # https://wiki.cloudmodding.com/oot/F3DZEX/Opcode_Details
