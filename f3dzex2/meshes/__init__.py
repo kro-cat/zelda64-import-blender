@@ -1,9 +1,9 @@
 import logging
 from typing import NamedTuple
 
-from f3dzex.memory import MemoryException
-import f3dzex.memory as memory
-from . import backgrounds as bgs, displaylists
+from f3dzex2.processmodel import memory
+from f3dzex2.processmodel.memory import MemoryException
+from . import backgrounds as bgs
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ def load_mesh_type_0(address: int) -> Mesh:
     count = header[1]
     displaylist_start = header[3]
     # displaylist_end = header[4]
-    lists = displaylists.load_all(displaylist_start, count)
+    lists = displaylists.load_array(displaylist_start, count)
 
     return Mesh(lists)
 

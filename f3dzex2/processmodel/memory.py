@@ -1,7 +1,6 @@
 import logging
 from mmap import mmap
 from struct import unpack, calcsize
-from .. import cwd
 
 
 logger = logging.getLogger(__name__)
@@ -20,22 +19,11 @@ class InvalidAddressException(MemoryException):
 
 
 class Segment:
-    # TODO: implement multi-page segments
-    # memory_map = {}
+    # TODO: implement multi-page segments maybe.
     _mmap: mmap
 
     def __init__(self, _mmap: mmap):
         self._mmap = _mmap
-
-    # def insert(self, offset: int, _mmap: mmap):
-    #     self.memory_map[offset] = _mmap
-
-    # def get_mmap(self, offset: int) -> mmap:
-    #     selected_offset = 0
-    #     for key in self.memory_map.keys():
-    #         if key > selected_offset and key <= offset:
-    #             selected_offset = key
-    #     _mmap = self.memory_map[selected_offset]
 
     def memmem(self, offset: int, pattern: bytes) -> int:
         pattern_list = list(pattern)
@@ -51,7 +39,7 @@ class Segment:
             if (offset_end > self._mmap.size()):
                 raise InvalidAddressException(
                         f"offset 0x{offset_end:06X} is out of bounds")
-            return _mmap[offset:offset_end]
+            return self._mmap[offset:offset_end]
         elif size < 0:
             raise InvalidAddressException("size must be positive")
         else:
@@ -61,11 +49,7 @@ class Segment:
         return unpack(fmt, self.read(offset, calcsize(fmt)))
 
     def size(self) -> int:
-        offset = max(self.memory_map.keys())
-        return offset + self.memory_map[offset].size()
-
-    # def get_start_offset(self) -> int:
-    #     return min(self.memory_map.keys())
+        return self._mmap.size()
 
 
 segment_cache = {}
@@ -75,17 +59,12 @@ def segment_offset(address: int):
     return ((address >> 24), (address & 0x00ffffff))
 
 
-def load_from_file(address: int, file_name: str):
-    segment, offset = segment_offset(address)
-    with cwd():
-        fp = open(file_name, "r+b")
-        logger.debug(f"loaded segment from {file_name}")
+def set_segment(segment: int, segment_data: Segment):
+    # if segment not in segment_cache:
+    #     segment_cache[segment] = Segment()
 
-        # if segment not in segment_cache:
-        #     segment_cache[segment] = Segment()
-
-        # segment_cache[segment].insert(offset, mmap(fp.fileno(), 0))
-        segment_cache[segment] = Segment(mmap(fp.fileno(), 0))
+    # segment_cache[segment].insert(offset, mmap(fp.fileno(), 0))
+    segment_cache[segment] = segment_data
 
 
 def get_segment(segment: int) -> Segment:

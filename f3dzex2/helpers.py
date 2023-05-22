@@ -1,6 +1,7 @@
 import logging
 
-from . import memory, animations, hierarchies, meshes
+from . import animations, hierarchies, meshes
+from .processmodel import memory
 
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,7 @@ def find_all_animations(limb_count: int, external: bool = False):
     # 0x0f (External Animations)
 
     segment = 0x0f if external else 0x06
-    address = memory.get_start_address(segment)
+    address = segment << 24
     end = memory.get_end_address(segment)
 
     found_animations = []
@@ -113,7 +114,10 @@ def find_all_meshes():
 
     end = memory.memmem(address, b"\x14\x00\x00\x00\x00\x00\x00\x00")
     if (end < 0):
-        end = memory.get_end_address(segment)
+        logger.warn(f"Could not find end marker in segment {segment}. "
+                    "Not attempting search.")
+        return []
+        # end = memory.get_end_address(segment)
 
     found_meshes = []
 

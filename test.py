@@ -2,20 +2,19 @@ import os
 import logging
 import sys
 
-import f3dzex
-import f3dzex.memory as memory
-import f3dzex.helpers as helpers
+import f3dzex2
+import f3dzex2.helpers as helpers
 
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-# f3dzex.logger.setLevel(logging.DEBUG)
-# f3dzex.segments.logger.setLevel(logging.DEBUG)
-# f3dzex.animations.logger.setLevel(logging.DEBUG)
+# f3dzex2.logger.setLevel(logging.DEBUG)
+# f3dzex2.segments.logger.setLevel(logging.DEBUG)
+# f3dzex2.animations.logger.setLevel(logging.DEBUG)
 
-f3dzex.prefix = os.path.join(f3dzex.prefix, "_tests")
+f3dzex2.prefix = os.path.join(f3dzex2.prefix, "_tests")
 
-memory.load_from_file(0x06000000, "01939000_-_0193D810.zobj")
+f3dzex2.load_segment_from_file(0x06, "01939000_-_0193D810.zobj")
 
 hiers = helpers.find_all_hierarchies()
 for hier in hiers:

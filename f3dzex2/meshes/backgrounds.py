@@ -1,7 +1,7 @@
 import logging
 
-from f3dzex.memory import MemoryException
-import f3dzex.memory as memory
+from f3dzex2.processmodel import memory
+from f3dzex2.processmodel.memory import MemoryException
 from . import jfif
 
 
