@@ -3,7 +3,7 @@ import os
 from contextlib import contextmanager
 from mmap import mmap
 
-from .processmodel import memory
+from . import memory
 
 
 logger = logging.getLogger(__name__)

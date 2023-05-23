@@ -16,6 +16,18 @@ f3dzex2.prefix = os.path.join(f3dzex2.prefix, "_tests")
 
 f3dzex2.load_segment_from_file(0x06, "01939000_-_0193D810.zobj")
 
-hiers = helpers.find_all_hierarchies()
-for hier in hiers:
-    anims = helpers.find_all_animations(len(hier.limbs))
+# hiers = helpers.find_all_hierarchies()
+# for hier in hiers:
+#     anims = helpers.find_all_animations(len(hier.limbs))
+
+
+from f3dzex2.processor.microcode import G_VTX, vector_buffer
+
+inst = G_VTX.struct()
+inst.numv = 1
+inst.vbidx = 1
+inst.vaddr = 0x06000000
+
+G_VTX.fn(inst)
+
+print(str(vector_buffer))

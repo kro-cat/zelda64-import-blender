@@ -1,7 +1,7 @@
 import logging
 
 from . import animations, hierarchies, meshes
-from .processmodel import memory
+from . import memory
 
 
 logger = logging.getLogger(__name__)

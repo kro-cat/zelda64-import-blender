@@ -1,8 +1,8 @@
 import logging
 from typing import NamedTuple
 
-from f3dzex2.processmodel import memory
-from f3dzex2.processmodel.memory import MemoryException
+from .. import memory
+from ..memory import MemoryException
 from . import backgrounds as bgs
 
 
